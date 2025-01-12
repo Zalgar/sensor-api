@@ -24,7 +24,7 @@ async fn get_sensor_data() -> impl Responder {
     let _delay = linux_embedded_hal::Delay {};
 
     // Create PMSA003I sensor object
-    let mut pmsa003i = Pmsa003i::new(i2c_bus);
+    let mut pmsa003i = Pmsa003i::new(i2c_bus, 0x12);
 
     // Read sensor data
     match pmsa003i.read() {
