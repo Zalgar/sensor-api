@@ -6,11 +6,11 @@ use chrono::Utc;
 
 #[derive(Serialize)]
 struct SensorData {
+    timestamp: String,
+    model: String,
     pm1_0: u16,
     pm2_5: u16,
-    pm10: u16,
-    model: String,
-    timestamp: String,
+    pm10: u16,   
 }
 
 async fn get_sensor_data() -> impl Responder {
