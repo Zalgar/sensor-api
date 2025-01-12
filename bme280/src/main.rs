@@ -62,9 +62,8 @@ async fn get_sensor_data() -> impl Responder {
         altitude,
     };
 
-    // Return the data as JSON
-    web::Json(response)
-}
+    // Return the response as JSON
+    HttpResponse::Ok().json(response)}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
