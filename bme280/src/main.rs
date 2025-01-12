@@ -1,7 +1,8 @@
-use actix_web::{web, App, HttpServer, Responder};
+use actix_web::{web, App, HttpServer, Responder, HttpResponse};
 use bme280::i2c::BME280;
 use linux_embedded_hal::{I2cdev, Delay};  // Import Delay from linux_embedded_hal
 use serde::Serialize;
+use chrono::Utc;
 
 #[derive(Serialize)]
 struct SensorData {
@@ -9,11 +10,16 @@ struct SensorData {
     humidity: f32,
     pressure: f32,
     altitude: f32,
+    model: String,
+    timestamp: String,
 }
 
 async fn get_sensor_data() -> impl Responder {
     // Set up the I2C bus and BME280 sensor
-    let i2c_bus = I2cdev::new("/dev/i2c-1").expect("Failed to open I2C bus");
+    let i2c_bus = match I2cdev::new("/dev/i2c-1") {
+        Ok(bus) => bus,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to open I2C bus"),
+    };
 
     // Create the delay object from linux_embedded_hal
     let mut delay = Delay {};
@@ -22,10 +28,19 @@ async fn get_sensor_data() -> impl Responder {
     let mut bme280 = BME280::new(i2c_bus, 0x77);
 
     // Initialize the BME280 sensor with the delay
-    bme280.init(&mut delay).expect("Failed to initialize BME280 sensor");
+    if let Err(e) = bme280.init(&mut delay) {
+        eprintln!("Failed to initialize BME280 sensor: {:?}", e);
+        return HttpResponse::InternalServerError().body("Failed to initialize BME280 sensor");
+    }
 
     // Read sensor data with the delay
-    let data = bme280.measure(&mut delay).expect("Failed to read sensor data");
+    let data = match bme280.measure(&mut delay) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Failed to read sensor data: {:?}", e);
+            return HttpResponse::InternalServerError().body("Failed to read sensor data");
+        }
+    };
 
     // Convert raw data to values
     let temperature = data.temperature;
@@ -39,6 +54,8 @@ async fn get_sensor_data() -> impl Responder {
 
     // Create the response struct
     let response = SensorData {
+        timestamp: Utc::now().to_rfc3339(),
+        model: "BME280".to_string(),
         temperature,
         humidity,
         pressure,

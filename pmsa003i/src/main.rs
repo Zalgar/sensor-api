@@ -1,18 +1,24 @@
-use actix_web::{web, App, HttpServer, Responder};
+use actix_web::{web, App, HttpServer, Responder, HttpResponse};
 use pmsa003i::Pmsa003i;
 use linux_embedded_hal::I2cdev;
 use serde::Serialize;
+use chrono::Utc;
 
 #[derive(Serialize)]
 struct SensorData {
     pm1_0: u16,
     pm2_5: u16,
     pm10: u16,
+    model: String,
+    timestamp: String,
 }
 
 async fn get_sensor_data() -> impl Responder {
     // Set up the I2C bus and PMSA003I sensor
-    let i2c_bus = I2cdev::new("/dev/i2c-1").expect("Failed to open I2C bus");
+    let i2c_bus = match I2cdev::new("/dev/i2c-1") {
+        Ok(bus) => bus,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to open I2C bus"),
+    };
 
     // Create the delay object from linux_embedded_hal
     let _delay = linux_embedded_hal::Delay {};
@@ -21,22 +27,31 @@ async fn get_sensor_data() -> impl Responder {
     let mut pmsa003i = Pmsa003i::new(i2c_bus);
 
     // Read sensor data
-    let data = pmsa003i.read().expect("Failed to read sensor data");
+    match pmsa003i.read() {
+        Ok(data) => {
+            // Extract particulate matter concentrations
+            let pm1_0 = data.pm1;
+            let pm2_5 = data.pm2_5;
+            let pm10 = data.pm10;
 
-    // Extract particulate matter concentrations
-    let pm1_0 = data.pm1;
-    let pm2_5 = data.pm2_5;
-    let pm10 = data.pm10;
+            // Create the response struct
+            let response = SensorData {
+                timestamp: Utc::now().to_rfc3339(),
+                model: "PMSA003I".to_string(),
+                pm1_0,
+                pm2_5,
+                pm10,
+            };
 
-    // Create the response struct
-    let response = SensorData {
-        pm1_0,
-        pm2_5,
-        pm10,
-    };
-
-    // Return the data as JSON
-    web::Json(response)
+            // Return the data as JSON
+            HttpResponse::Ok().json(response)
+        }
+        Err(e) => {
+            // Log the error and return an error response
+            eprintln!("Failed to read sensor data: {:?}", e);
+            HttpResponse::InternalServerError().body("Failed to read sensor data")
+        }
+    }
 }
 
 #[actix_web::main]
