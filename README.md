@@ -28,6 +28,7 @@ The BME280 application reads temperature, humidity, pressure, and altitude data 
 ### How to Run
 
 1. Navigate to the bme280 directory:
+1. Navigate to the bme280 directory:
     ```sh
     cd bme280
     ```
