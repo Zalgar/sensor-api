@@ -65,11 +65,7 @@ The PMSA003I application reads particulate matter concentrations (PM1.0, PM2.5, 
 
 ### How to Run
 
-1. Navigate to the 
-
-pmsa003i
-
- directory:
+1. Navigate to the pmsa003i directory:
     ```sh
     cd pmsa003i
     ```
@@ -104,18 +100,6 @@ pmsa003i
 
 Both applications use the following common dependencies:
 - `actix-web`: For building the web server and handling HTTP requests.
-- 
-
-linux_embedded_hal
-
-: For hardware abstraction layer (HAL) implementations.
-- 
-
-serde
-
-: For serializing and deserializing data.
-- 
-
-chrono
-
-: For handling date and time.
+- linux_embedded_hal: For hardware abstraction layer (HAL) implementations.
+- serde: For serializing and deserializing data.
+- chrono: For handling date and time.
