@@ -60,7 +60,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new().route("/sensor_data", web::get().to(get_sensor_data))
     })
-    .bind("0.0.0.0:5000")?
+    .bind("0.0.0.0:5001")?
     .run()
     .await
 }
