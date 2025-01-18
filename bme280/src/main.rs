@@ -45,7 +45,7 @@ async fn get_sensor_data() -> impl Responder {
     // Convert raw data to values
     let temperature = data.temperature;
     let humidity = data.humidity;
-    let pressure = data.pressure;
+    let pressure = data.pressure / 100.0; // Convert pressure from Pa to hPa
 
     // Calculate altitude using the formula:
     // altitude = 44330 * (1.0 - (pressure / sea_level_pressure).powf(1.0 / 5.255))
