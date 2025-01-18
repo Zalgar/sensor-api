@@ -27,11 +27,7 @@ The BME280 application reads temperature, humidity, pressure, and altitude data 
 
 ### How to Run
 
-1. Navigate to the 
-
-bme280
-
- directory:
+1. Navigate to the bme280 directory:
     ```sh
     cd bme280
     ```
@@ -123,7 +119,3 @@ serde
 chrono
 
 : For handling date and time.
-
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
