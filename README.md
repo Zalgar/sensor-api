@@ -1,7 +1,3 @@
-Collecting workspace information
-
-Still building the workspace index, response may be less accurate.
-
 # Sensor API
 
 This project contains two Rust applications for reading sensor data from BME280 and PMSA003I sensors using the I2C bus and exposing the data through a web API using Actix-web.
