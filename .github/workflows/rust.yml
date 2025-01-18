@@ -28,7 +28,13 @@ jobs:
         toolchain: stable
         override: true
 
-    - name: Build ${{ matrix.project }}
+    - name: Add ARM target
+      run: rustup target add armv7-unknown-linux-gnueabihf
+
+    - name: Install ARM cross-compilation toolchain
+      run: sudo apt-get install -y gcc-arm-linux-gnueabihf
+
+    - name: Build ${{ matrix.project }} for ARM
       run: |
         cd ${{ matrix.project }}
-        cargo build --verbose
+        cargo build --target armv7-unknown-linux-gnueabihf --verbose
