@@ -9,6 +9,7 @@ use linux_embedded_hal::I2cdev;
 use pmsa003i::Pmsa003i;
 
 #[derive(Serialize, Deserialize)]
+
 struct Config {
     network_port: u16,
     i2c_bus_device_path: String,
