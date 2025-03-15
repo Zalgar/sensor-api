@@ -17,6 +17,7 @@ jobs:
         project:
           - bme280
           - pmsa003i
+          - scd-41
 
     steps:
     - name: Checkout code
