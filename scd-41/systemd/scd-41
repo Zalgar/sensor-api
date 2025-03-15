@@ -1,0 +1,13 @@
+[Unit]
+Description=scd-41 sensor api
+After=network.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+Type=simple
+ExecStart=/usr/bin/scd-41
+Environment=
+
+[Install]
+WantedBy=multi-user.target
