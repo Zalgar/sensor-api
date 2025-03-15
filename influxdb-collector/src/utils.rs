@@ -1,7 +1,10 @@
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::env;
+
 use std::process::Command;
+use std::env;
+/*use std::fs::OpenOptions;
+use std::io::Write;
+
+
 
 pub fn log_error(message: &str) {
     let log_file_path = "error.log";
@@ -25,7 +28,7 @@ pub fn log_info(message: &str) {
         eprintln!("Could not write to log file.");
         std::process::exit(1);
     });
-}
+}*/
 
 pub fn get_hostname() -> String {
     env::var("COMPUTERNAME").unwrap_or_else(|_| {
