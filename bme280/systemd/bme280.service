@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Restart=always
 Type=simple
-ExecStart=/usr/bin/bme280
+ExecStart=/usr/bin/bme280_api
 Environment=
 
 [Install]

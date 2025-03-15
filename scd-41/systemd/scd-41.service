@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Restart=always
 Type=simple
-ExecStart=/usr/bin/scd-41
+ExecStart=/usr/bin/scd-41_api
 Environment=
 
 [Install]
