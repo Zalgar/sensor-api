@@ -1,6 +1,7 @@
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde_json::Value;
+use crate::utils::get_hostname;
 
 pub fn send_log(influxdb_url: &str, api_key: &str, org: &str, bucket: &str, sensor_data: &Value) {
     let client = Client::new();
@@ -24,11 +25,14 @@ pub fn send_log(influxdb_url: &str, api_key: &str, org: &str, bucket: &str, sens
 }
 
 fn convert_to_line_protocol(sensor_data: &Value) -> String {
+    let hostname = get_hostname();
+    let measurement = sensor_data.get("model").and_then(Value::as_str).unwrap_or("unknown");
+
     // Assuming sensor_data is a JSON object with key-value pairs
     let mut lines = Vec::new();
     if let Some(obj) = sensor_data.as_object() {
         for (key, value) in obj {
-            let line = format!("sensor_data,host=host1 {}={}", key, value);
+            let line = format!("{},host={} {}={}", measurement, hostname, key, value);
             lines.push(line);
         }
     }
