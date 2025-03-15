@@ -6,8 +6,9 @@ Wants=network-online.target
 [Service]
 Restart=always
 Type=simple
-ExecStart=/usr/bin/bme280_api
-Environment=
+ExecStart=/srv/bme280/bme280_api
+WorkingDirectory=/srv/bme280
+User=sensor
 
 [Install]
 WantedBy=multi-user.target

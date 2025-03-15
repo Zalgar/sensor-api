@@ -6,7 +6,7 @@ mod utils;
 use crate::config::create_config;
 use crate::api::fetch_sensor_data;
 use crate::influxdb::send_log;
-use crate::utils::{log_error, log_info};
+//use crate::utils::{log_error, log_info};
 use std::sync::{Arc, Mutex};
 use tokio::time::{interval, Duration};
 use tokio_retry::strategy::{ExponentialBackoff, jitter};
@@ -39,7 +39,7 @@ async fn main() {
             .await {
                 Ok(data) => data,
                 Err(_) => {
-                    log_error(&format!("Failed to fetch sensor data from {} after retries", api_url));
+                    //log_error(&format!("Failed to fetch sensor data from {} after retries", api_url));
                     continue; // Skip to the next API URL
                 }
             };
@@ -70,11 +70,11 @@ async fn main() {
                 }
             })
             .await {
-                log_error("Failed to send log to InfluxDB after retries");
+                //log_error("Failed to send log to InfluxDB after retries");
                 continue; // Skip to the next API URL
             }
 
-            log_info(&format!("Successfully fetched sensor data from {} and sent log to InfluxDB", api_url));
+            //log_info(&format!("Successfully fetched sensor data from {} and sent log to InfluxDB", api_url));
         }
     }
 }

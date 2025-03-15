@@ -23,7 +23,7 @@ struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            network_port: 5000, // Default network port
+            network_port: 5002, // Default network port
             i2c_address_decimal: 0x62, // Default I2C address (98 in decimal)
             i2c_bus_device_path: String::from("/dev/i2c-1"), // Default I2C bus device path
             bind_address: String::from("0.0.0.0"), // Default bind address

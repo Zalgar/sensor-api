@@ -6,8 +6,9 @@ Wants=network-online.target
 [Service]
 Restart=always
 Type=simple
-ExecStart=/usr/bin/scd-41_api
-Environment=
+ExecStart=/srv/scd-41/scd-41_api
+WorkingDirectory=/srv/scd-41
+User=sensor
 
 [Install]
 WantedBy=multi-user.target
