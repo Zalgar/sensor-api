@@ -14,6 +14,11 @@ sudo usermod -a -G i2c sensor
 You may also need to change perms for the path too, this might need to be refined.
 sudo chmod 660 /dev/i2c-1
 
+Beyond normal rust installation for building you'll also need to:
+
+sudo apt-get install pkg-config libssl-dev musl-tools gcc-arm-linux-gnueabihf
+rustup target add arm-unknown-linux-musleabihf
+
 ### How to build
 
 1. Navigate to the sensor directory:
