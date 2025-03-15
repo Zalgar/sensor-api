@@ -6,8 +6,9 @@ Wants=network-online.target
 [Service]
 Restart=always
 Type=simple
-ExecStart=/usr/bin/pmsa003i_api
-Environment=
+ExecStart=/srv/pmsa003i/pmsa003i_api
+WorkingDirectory=/srv/pmsa003i
+User=sensor
 
 [Install]
 WantedBy=multi-user.target
