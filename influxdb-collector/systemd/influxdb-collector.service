@@ -1,0 +1,13 @@
+[Unit]
+Description=InfluxDB collector for sensor api
+After=network.target pmsa003i.service scd-41.service bme280.service
+Wants=network-online.target
+
+[Service]
+Restart=always
+Type=simple
+ExecStart=/usr/bin/influxdb-collector
+Environment=
+
+[Install]
+WantedBy=multi-user.target

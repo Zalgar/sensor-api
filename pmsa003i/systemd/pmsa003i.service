@@ -1,0 +1,13 @@
+[Unit]
+Description=pmsa003i sensor api
+After=network.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+Type=simple
+ExecStart=/usr/bin/pmsa003i_api
+Environment=
+
+[Install]
+WantedBy=multi-user.target

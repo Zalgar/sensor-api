@@ -2,7 +2,7 @@ use actix_web::{web, App, HttpServer, HttpResponse, Responder, middleware::Logge
 use bme280::i2c::BME280; // Import BME280 sensor library
 use linux_embedded_hal::{I2cdev, Delay};  // Import I2C device and delay from linux_embedded_hal
 use serde::{Deserialize, Serialize}; // Import serialization/deserialization from Serde
-//use chrono::Utc; // Import Utc for timestamps
+use chrono::Utc; // Import Utc for timestamps
 use std::fs; // Import filesystem operations
 use std::fs::File; // Import file operations
 use std::io::Write; // Import write operations
@@ -99,7 +99,7 @@ async fn get_sensor_data() -> impl Responder {
 
     // Create sensor data response
     let sensor_data = SensorData {
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: Utc::now().to_rfc3339(),
         model: String::from("BME280"),
         temperature,
         humidity,

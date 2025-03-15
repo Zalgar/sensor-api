@@ -1,0 +1,13 @@
+[Unit]
+Description=bme280 sensor api
+After=network.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+Type=simple
+ExecStart=/usr/bin/bme280_api
+Environment=
+
+[Install]
+WantedBy=multi-user.target
