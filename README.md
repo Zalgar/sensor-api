@@ -1,23 +1,23 @@
 # Sensor API
 
-This project contains two Rust applications for reading sensor data from BME280 and PMSA003I sensors using the I2C bus and exposing the data through a web API using Actix-web.
+This project contains Rust based API's which interface directly to sensors and expose it via a http endpoint. This came as need because I got sick of how implementation of different sensors always required bespoke code, this way everything is just a plain old http api when trying to communicate with a sensor.
 
 # Base Config
 Ensure you give the sensor user if using systemd units provided has access to the i2c bus(s)
 
 Find the group which provides access
-ls -l /dev/i2c*
+```ls -l /dev/i2c*```
 
 Most cases its the group i2c
-sudo usermod -a -G i2c sensor
+```sudo usermod -a -G i2c sensor```
 
 You may also need to change perms for the path too, this might need to be refined.
-sudo chmod 660 /dev/i2c-1
+```sudo chmod 660 /dev/i2c-1```
 
 Beyond normal rust installation for building you'll also need to:
 
-sudo apt-get install pkg-config libssl-dev musl-tools gcc-arm-linux-gnueabihf
-rustup target add arm-unknown-linux-musleabihf
+```sudo apt-get install pkg-config libssl-dev musl-tools gcc-arm-linux-gnueabihf
+rustup target add arm-unknown-linux-musleabihf```
 
 ### How to build
 
@@ -55,3 +55,8 @@ If you are not cross compiling for Arm, you'll need to remove the .cargo/cargo.t
     "altitude": 100.0
 }
 ```
+### Sensors not functioning
+LTR390
+TSL2591
+BH1750
+VEML7700
