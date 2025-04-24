@@ -6,8 +6,9 @@ Wants=network-online.target
 [Service]
 Restart=always
 Type=simple
-ExecStart=/usr/bin/influxdb-collector
-Environment=
+ExecStart=/srv/influxdb-collector/influxdb-collector
+WorkingDirectory=/srv/influxdb-collector
+User=sensor
 
 [Install]
 WantedBy=multi-user.target
