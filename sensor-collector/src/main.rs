@@ -8,7 +8,7 @@ use crate::config::create_config;
 use crate::api::fetch_sensor_data;
 use crate::influxdb::send_log;
 use crate::mqtt::send_mqtt_sensor_data;
-//use crate::utils::{log_error, log_info};
+use crate::utils::Logger;
 use std::sync::{Arc, Mutex};
 use tokio::time::{interval, Duration};
 use tokio_retry::strategy::{ExponentialBackoff, jitter};
@@ -18,7 +18,14 @@ use tokio_retry::Retry;
 async fn main() {
     // Load or create the configuration
     let config = create_config();
+    let logger = Logger::new(&config);
     let config = Arc::new(config);
+    let logger = Arc::new(logger);
+
+    logger.info("main", "Starting sensor data collector");
+    logger.info("main", &format!("Query interval: {} seconds", config.query_interval));
+    logger.info("main", &format!("InfluxDB enabled: {}", config.enable_influxdb));
+    logger.info("main", &format!("MQTT enabled: {}", config.enable_mqtt));
 
     // Create an interval based on the config setting
     let mut interval = interval(Duration::from_secs(config.query_interval));
@@ -29,23 +36,28 @@ async fn main() {
         for api_url in &config.api_urls {
             let api_url = api_url.clone();
             let config = Arc::clone(&config);
+            let logger = Arc::clone(&logger);
+
+            logger.debug("main", &format!("Processing API URL: {}", api_url));
 
             // Retry fetching sensor data from the API
             let sensor_data = match Retry::spawn(ExponentialBackoff::from_millis(10).map(jitter).take(5), {
                 let api_url = api_url.clone();
+                let logger = Arc::clone(&logger);
                 move || {
                     let api_url = api_url.clone();
-                    tokio::task::spawn_blocking(move || fetch_sensor_data(&api_url))
+                    let logger = Arc::clone(&logger);
+                    tokio::task::spawn_blocking(move || fetch_sensor_data(&api_url, &logger))
                 }
             })
             .await {
                 Ok(Ok(data)) => data,
                 Ok(Err(e)) => {
-                    eprintln!("Failed to fetch sensor data from {}: {}", api_url, e);
+                    logger.error("main", &format!("Failed to fetch sensor data from {}: {}", api_url, e));
                     continue; // Skip to the next API URL
                 }
                 Err(_) => {
-                    eprintln!("Failed to fetch sensor data from {} after retries", api_url);
+                    logger.error("main", &format!("Failed to fetch sensor data from {} after retries", api_url));
                     continue; // Skip to the next API URL
                 }
             };
@@ -58,6 +70,8 @@ async fn main() {
 
             // Send to InfluxDB if enabled
             if config.enable_influxdb {
+                logger.debug("main", "InfluxDB is enabled, preparing to send data");
+                
                 // Retry sending the logs to InfluxDB
                 if let Err(_) = Retry::spawn(ExponentialBackoff::from_millis(10).map(jitter).take(5), {
                     let influxdb_url = influxdb_url.clone();
@@ -65,26 +79,30 @@ async fn main() {
                     let influxdb_org = influxdb_org.clone();
                     let influxdb_bucket = influxdb_bucket.clone();
                     let sensor_data = Arc::clone(&sensor_data);
+                    let logger = Arc::clone(&logger);
                     move || {
                         let influxdb_url = influxdb_url.clone();
                         let influxdb_api_key = influxdb_api_key.clone();
                         let influxdb_org = influxdb_org.clone();
                         let influxdb_bucket = influxdb_bucket.clone();
                         let sensor_data = Arc::clone(&sensor_data);
+                        let logger = Arc::clone(&logger);
                         tokio::task::spawn_blocking(move || {
                             let sensor_data = sensor_data.lock().unwrap();
-                            send_log(&influxdb_url, &influxdb_api_key, &influxdb_org, &influxdb_bucket, &sensor_data)
+                            send_log(&influxdb_url, &influxdb_api_key, &influxdb_org, &influxdb_bucket, &sensor_data, &logger)
                         })
                     }
                 })
                 .await {
-                    //log_error("Failed to send log to InfluxDB after retries");
+                    logger.error("main", "Failed to send log to InfluxDB after retries");
                 }
+            } else {
+                logger.debug("main", "InfluxDB is disabled, skipping InfluxDB send");
             }
 
             // Send to MQTT if enabled
             if config.enable_mqtt {
-                println!("🔄 MQTT is enabled, preparing to send data...");
+                logger.debug("main", "MQTT is enabled, preparing to send data");
                 let mqtt_broker = config.mqtt_broker.clone();
                 let mqtt_port = config.mqtt_port;
                 let mqtt_client_id = config.mqtt_client_id.clone();
@@ -92,7 +110,7 @@ async fn main() {
                 let mqtt_username = config.mqtt_username.clone();
                 let mqtt_password = config.mqtt_password.clone();
                 
-                println!("📡 Attempting MQTT publish to {}:{}", mqtt_broker, mqtt_port);
+                logger.info("main", &format!("Attempting MQTT publish to {}:{}", mqtt_broker, mqtt_port));
                 
                 // Retry sending to MQTT
                 if let Err(e) = Retry::spawn(ExponentialBackoff::from_millis(10).map(jitter).take(5), {
@@ -102,6 +120,7 @@ async fn main() {
                     let mqtt_username = mqtt_username.clone();
                     let mqtt_password = mqtt_password.clone();
                     let sensor_data = Arc::clone(&sensor_data);
+                    let logger = Arc::clone(&logger);
                     move || {
                         let mqtt_broker = mqtt_broker.clone();
                         let mqtt_client_id = mqtt_client_id.clone();
@@ -109,6 +128,7 @@ async fn main() {
                         let mqtt_username = mqtt_username.clone();
                         let mqtt_password = mqtt_password.clone();
                         let sensor_data = Arc::clone(&sensor_data);
+                        let logger = Arc::clone(&logger);
                         tokio::task::spawn_blocking(move || {
                             let sensor_data = sensor_data.lock().unwrap();
                             send_mqtt_sensor_data(
@@ -119,17 +139,18 @@ async fn main() {
                                 mqtt_username.as_deref(),
                                 mqtt_password.as_deref(),
                                 &sensor_data,
+                                &logger,
                             )
                         })
                     }
                 })
                 .await {
-                    eprintln!("❌ Failed to send message to MQTT after retries: {:?}", e);
+                    logger.error("main", &format!("Failed to send message to MQTT after retries: {:?}", e));
                 } else {
-                    println!("✅ MQTT message sent successfully");
+                    logger.info("main", "MQTT message sent successfully");
                 }
             } else {
-                println!("⚪ MQTT is disabled, skipping MQTT publish");
+                logger.debug("main", "MQTT is disabled, skipping MQTT publish");
             }
 
             //log_info(&format!("Successfully processed sensor data from {}", api_url));

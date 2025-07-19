@@ -1,13 +1,13 @@
 [Unit]
-Description=InfluxDB collector for sensor api
+Description=Sensor collector for sensor api
 After=network.target pmsa003i.service scd-41.service bme280.service
 Wants=network-online.target
 
 [Service]
 Restart=always
 Type=simple
-ExecStart=/srv/influxdb-collector/influxdb-collector
-WorkingDirectory=/srv/influxdb-collector
+ExecStart=/srv/sensor-collector/sensor-collector
+WorkingDirectory=/srv/sensor-collector
 User=sensor
 
 [Install]

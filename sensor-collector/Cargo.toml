@@ -1,5 +1,5 @@
 [package]
-name = "influxdb-collector"
+name = "sensor-collector"
 version = "0.1.0"
 edition = "2021"
 

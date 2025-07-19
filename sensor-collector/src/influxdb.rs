@@ -1,26 +1,38 @@
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde_json::Value;
-use crate::utils::get_hostname;
+use crate::utils::{get_hostname, Logger};
 
-pub fn send_log(influxdb_url: &str, api_key: &str, org: &str, bucket: &str, sensor_data: &Value) {
+pub fn send_log(influxdb_url: &str, api_key: &str, org: &str, bucket: &str, sensor_data: &Value, logger: &Logger) -> Result<(), String> {
+    logger.debug("influxdb", &format!("Sending data to InfluxDB: {}", influxdb_url));
+    
     let client = Client::new();
     let mut headers = HeaderMap::new();
-    headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("Token {}", api_key)).unwrap());
+    headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("Token {}", api_key))
+        .map_err(|e| format!("Invalid API key format: {}", e))?);
 
     let write_url = format!("{}/api/v2/write?org={}&bucket={}&precision=s", influxdb_url, org, bucket);
+    logger.debug("influxdb", &format!("Write URL: {}", write_url));
 
     // Convert sensor data to line protocol format
     let line_protocol = convert_to_line_protocol(sensor_data);
+    logger.debug("influxdb", &format!("Line protocol: {}", line_protocol));
 
     let response = client.post(&write_url)
         .headers(headers)
         .body(line_protocol)
         .send()
-        .expect("Failed to send log to InfluxDB");
+        .map_err(|e| format!("Failed to send request to InfluxDB: {}", e))?;
 
-    if !response.status().is_success() {
-        eprintln!("Failed to send log to InfluxDB: {}", response.status());
+    if response.status().is_success() {
+        logger.info("influxdb", "Successfully sent data to InfluxDB");
+        Ok(())
+    } else {
+        let error_msg = format!("Failed to send log to InfluxDB: {} - {}", 
+            response.status(), 
+            response.text().unwrap_or_else(|_| "Unknown error".to_string()));
+        logger.error("influxdb", &error_msg);
+        Err(error_msg)
     }
 }
 

@@ -1,6 +1,7 @@
 use rumqttc::{Client, MqttOptions, QoS};
 use serde_json::Value;
 use std::time::Duration;
+use crate::utils::Logger;
 
 pub fn send_mqtt_sensor_data(
     broker: &str,
@@ -10,13 +11,14 @@ pub fn send_mqtt_sensor_data(
     username: Option<&str>,
     password: Option<&str>,
     sensor_data: &Value,
+    logger: &Logger,
 ) -> Result<(), String> {
     // Extract model from sensor data
     let model = sensor_data.get("model")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
     
-    println!("🔵 Attempting to send MQTT messages to {}:{} for device '{}' model '{}'", broker, port, device_id, model);
+    logger.info("mqtt", &format!("Attempting to send MQTT messages to {}:{} for device '{}' model '{}'", broker, port, device_id, model));
     
     // Create a unique client ID to avoid conflicts
     let unique_client_id = format!("{}-{}", client_id, std::process::id());
@@ -25,10 +27,10 @@ pub fn send_mqtt_sensor_data(
     mqttoptions.set_keep_alive(Duration::from_secs(60));
     
     if let (Some(user), Some(pass)) = (username, password) {
-        println!("🔐 Using MQTT authentication for user: {}", user);
+        logger.debug("mqtt", &format!("Using MQTT authentication for user: {}", user));
         mqttoptions.set_credentials(user, pass);
     } else {
-        println!("🔓 No MQTT authentication configured");
+        logger.debug("mqtt", "No MQTT authentication configured");
     }
     
     let (client, mut eventloop) = Client::new(mqttoptions, 10);
@@ -58,13 +60,13 @@ pub fn send_mqtt_sensor_data(
         return Err("No sensor values found to publish".to_string());
     }
     
-    println!("� Preparing to publish {} sensor values", sensor_values.len());
+    logger.info("mqtt", &format!("Preparing to publish {} sensor values", sensor_values.len()));
     
     // Publish each sensor value to its own topic
     for (topic, payload) in &sensor_values {
-        println!("📤 Publishing to topic '{}': {}", topic, payload);
+        logger.debug("mqtt", &format!("Publishing to topic '{}': {}", topic, payload));
         match client.publish(topic, QoS::AtMostOnce, false, payload.clone()) {
-            Ok(_) => println!("✓ Queued message for topic '{}'", topic),
+            Ok(_) => logger.debug("mqtt", &format!("Queued message for topic '{}'", topic)),
             Err(e) => return Err(format!("Failed to queue MQTT message for topic '{}': {}", topic, e)),
         }
     }
@@ -90,11 +92,11 @@ pub fn send_mqtt_sensor_data(
                     match notification {
                         rumqttc::Event::Incoming(rumqttc::Packet::ConnAck(_)) => {
                             connected = true;
-                            println!("🔗 Connected to MQTT broker");
+                            logger.debug("mqtt", "Connected to MQTT broker");
                         }
                         rumqttc::Event::Outgoing(rumqttc::Outgoing::Publish(_)) => {
                             messages_sent += 1;
-                            println!("📤 Message {} of {} sent to broker", messages_sent, expected_messages);
+                            logger.debug("mqtt", &format!("Message {} of {} sent to broker", messages_sent, expected_messages));
                             
                             // If all messages are sent, we can exit
                             if messages_sent >= expected_messages {
@@ -123,7 +125,7 @@ pub fn send_mqtt_sensor_data(
         }
         
         if messages_sent < expected_messages {
-            println!("⚠️  Only {} of {} messages confirmed sent", messages_sent, expected_messages);
+            logger.warn("mqtt", &format!("Only {} of {} messages confirmed sent", messages_sent, expected_messages));
         }
         
         // We connected, so the messages were likely sent even if we didn't see all confirmations
@@ -132,11 +134,11 @@ pub fn send_mqtt_sensor_data(
     
     match result {
         Ok(msg) => {
-            println!("✅ MQTT: {}", msg);
+            logger.info("mqtt", &msg);
             Ok(())
         }
         Err(e) => {
-            println!("❌ MQTT error: {}", e);
+            logger.error("mqtt", &e);
             Err(e)
         }
     }

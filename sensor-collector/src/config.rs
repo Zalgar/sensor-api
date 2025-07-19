@@ -15,6 +15,12 @@ pub struct Config {
     pub enable_influxdb: bool,
     pub enable_mqtt: bool,
     
+    // Logging configuration
+    pub log_level: String, // "debug", "info", "warn", "error"
+    pub enable_mqtt_debug: bool,
+    pub enable_influxdb_debug: bool,
+    pub enable_api_debug: bool,
+    
     // MQTT configuration
     pub mqtt_broker: String,
     pub mqtt_port: u16,
@@ -38,6 +44,12 @@ pub fn create_config() -> Config {
             // Output configuration flags
             enable_influxdb: true,
             enable_mqtt: false,
+            
+            // Logging configuration
+            log_level: "info".to_string(), // Default to info level
+            enable_mqtt_debug: false,
+            enable_influxdb_debug: false,
+            enable_api_debug: false,
             
             // MQTT configuration
             mqtt_broker: "localhost".to_string(),
