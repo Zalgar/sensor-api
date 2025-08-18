@@ -1,5 +1,5 @@
 [Unit]
-Description=pmsa003i sensor api
+Description=PMSA003I Particulate Matter Sensor API
 After=network.target
 Wants=network-online.target
 

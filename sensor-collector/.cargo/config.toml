@@ -1,0 +1,7 @@
+[build]
+rustflags = ["-C", "target-feature=+crt-static"]
+target = "arm-unknown-linux-musleabihf"
+
+# Set custom linker for the specific target
+[target.arm-unknown-linux-musleabihf]
+linker = "arm-linux-gnueabihf-gcc"

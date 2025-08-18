@@ -1,0 +1,14 @@
+[Unit]
+Description=BH1750 Light Sensor API
+After=network.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+Type=simple
+ExecStart=/srv/bh1750/bh1750_api
+WorkingDirectory=/srv/bh1750
+User=sensor
+
+[Install]
+WantedBy=multi-user.target

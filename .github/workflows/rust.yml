@@ -1,41 +1,250 @@
-name: Rust
+name: Sensor API Build and Release
 
 on:
   push:
     branches:
       - main
+      - dev
   pull_request:
     branches:
       - main
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  build:
+  detect-changes:
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        project:
-          - bme280
-          - pmsa003i
-          - scd-41
-
+    outputs:
+      changed-sensors: ${{ steps.changes.outputs.changed-sensors }}
+      any-changes: ${{ steps.changes.outputs.any-changes }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Set up Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
+      - name: Detect changed sensors
+        id: changes
+        run: |
+          # Get list of changed files
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          else
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          fi
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          
+          # Define all sensors
+          ALL_SENSORS=("bme280" "pmsa003i" "scd-41" "ltr390" "bh1750" "veml7700" "tsl2591" "sensor-collector")
+          
+          # Detect which sensors have changes
+          CHANGED_SENSORS=()
+          for sensor in "${ALL_SENSORS[@]}"; do
+            if echo "$CHANGED_FILES" | grep -q "^${sensor}/"; then
+              CHANGED_SENSORS+=("$sensor")
+              echo "Detected changes in: $sensor"
+            fi
+          done
+          
+          # Convert array to JSON format for matrix
+          if [ ${#CHANGED_SENSORS[@]} -eq 0 ]; then
+            echo "changed-sensors=[]" >> $GITHUB_OUTPUT
+            echo "any-changes=false" >> $GITHUB_OUTPUT
+            echo "No sensor changes detected"
+          else
+            CHANGED_JSON=$(printf '%s\n' "${CHANGED_SENSORS[@]}" | jq -R . | jq -s .)
+            echo "changed-sensors=$CHANGED_JSON" >> $GITHUB_OUTPUT
+            echo "any-changes=true" >> $GITHUB_OUTPUT
+            echo "Changed sensors: ${CHANGED_SENSORS[*]}"
+          fi
 
-    - name: Add ARM musl target
-      run: rustup target add arm-unknown-linux-musleabihf
+  build-and-release:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.any-changes == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sensor: ${{ fromJson(needs.detect-changes.outputs.changed-sensors) }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Install musl tools and ARM cross-compilation toolchain
-      run: sudo apt-get update && sudo apt-get install -y musl-tools gcc-arm-linux-gnueabihf
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: arm-unknown-linux-musleabihf
 
-    - name: Build ${{ matrix.project }} for ARM musl
-      run: |
-        cd ${{ matrix.project }}
-        cargo build --target arm-unknown-linux-musleabihf --release --verbose
+      - name: Install cross-compilation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools gcc-arm-linux-gnueabihf pkg-config libssl-dev
+
+      - name: Generate version timestamp
+        id: version
+        run: |
+          VERSION=$(date -u +"%Y.%m.%d-%H.%M")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
+
+      - name: Build ${{ matrix.sensor }} for ARM Linux
+        run: |
+          cd ${{ matrix.sensor }}
+          echo "Building ${{ matrix.sensor }} version ${{ steps.version.outputs.version }}"
+          cargo build --target arm-unknown-linux-musleabihf --release --verbose
+
+      - name: Verify build artifacts
+        run: |
+          cd ${{ matrix.sensor }}
+          if [ -f "target/arm-unknown-linux-musleabihf/release/${{ matrix.sensor }}_api" ]; then
+            echo "✅ Binary built successfully: ${{ matrix.sensor }}_api"
+            ls -la target/arm-unknown-linux-musleabihf/release/${{ matrix.sensor }}_api
+          elif [ -f "target/arm-unknown-linux-musleabihf/release/sensor-collector" ]; then
+            echo "✅ Binary built successfully: sensor-collector"
+            ls -la target/arm-unknown-linux-musleabihf/release/sensor-collector
+          else
+            echo "❌ Binary not found!"
+            ls -la target/arm-unknown-linux-musleabihf/release/
+            exit 1
+          fi
+
+      - name: Prepare release artifacts
+        run: |
+          mkdir -p release-artifacts
+          cd ${{ matrix.sensor }}
+          
+          # Copy binary
+          if [ -f "target/arm-unknown-linux-musleabihf/release/${{ matrix.sensor }}_api" ]; then
+            cp target/arm-unknown-linux-musleabihf/release/${{ matrix.sensor }}_api ../release-artifacts/
+            BINARY_NAME="${{ matrix.sensor }}_api"
+          elif [ -f "target/arm-unknown-linux-musleabihf/release/sensor-collector" ]; then
+            cp target/arm-unknown-linux-musleabihf/release/sensor-collector ../release-artifacts/
+            BINARY_NAME="sensor-collector"
+          fi
+          
+          # Copy configuration files if they exist
+          if [ -f "config.json" ]; then
+            cp config.json ../release-artifacts/config.json.example
+          fi
+          
+          # Copy systemd service file
+          if [ -f "../systemd/${{ matrix.sensor }}.service" ]; then
+            cp ../systemd/${{ matrix.sensor }}.service ../release-artifacts/
+          fi
+          
+          # Create README for this release
+          cat > ../release-artifacts/README.md << EOF
+          # ${{ matrix.sensor }} Release ${{ steps.version.outputs.version }}
+          
+          ## Installation
+          
+          1. Copy the binary to your target system:
+             \`\`\`bash
+             sudo cp ${BINARY_NAME} /srv/${{ matrix.sensor }}/
+             sudo chmod +x /srv/${{ matrix.sensor }}/${BINARY_NAME}
+             \`\`\`
+          
+          2. Install systemd service (if provided):
+             \`\`\`bash
+             sudo cp ${{ matrix.sensor }}.service /etc/systemd/system/
+             sudo systemctl daemon-reload
+             sudo systemctl enable ${{ matrix.sensor }}.service
+             sudo systemctl start ${{ matrix.sensor }}.service
+             \`\`\`
+          
+          3. Configure as needed using config.json.example as a template.
+          
+          ## Build Information
+          - **Built on**: $(date -u)
+          - **Target**: arm-unknown-linux-musleabihf
+          - **Rust version**: $(rustc --version)
+          - **Commit**: ${{ github.sha }}
+          EOF
+
+      - name: Create compressed archive
+        run: |
+          cd release-artifacts
+          tar -czf ${{ matrix.sensor }}-${{ steps.version.outputs.version }}-arm-linux.tar.gz *
+          echo "Created archive: ${{ matrix.sensor }}-${{ steps.version.outputs.version }}-arm-linux.tar.gz"
+          ls -la *.tar.gz
+
+      - name: Create Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ matrix.sensor }}-${{ steps.version.outputs.version }}
+          name: ${{ matrix.sensor }} ${{ steps.version.outputs.version }}
+          body: |
+            ## ${{ matrix.sensor }} Release ${{ steps.version.outputs.version }}
+            
+            **Build Information:**
+            - 🎯 Target: `arm-unknown-linux-musleabihf`
+            - 🔨 Built from commit: `${{ github.sha }}`
+            - 📅 Build time: `${{ steps.version.outputs.version }}`
+            - 🚀 Trigger: Push to main branch
+            
+            **What's included:**
+            - Compiled binary for ARM Linux
+            - SystemD service file (if applicable)
+            - Example configuration file
+            - Installation instructions
+            
+            **Installation:**
+            1. Download and extract the archive
+            2. Copy binary to `/srv/${{ matrix.sensor }}/`
+            3. Install systemd service
+            4. Configure and start the service
+            
+            See the included README.md for detailed installation instructions.
+          files: |
+            release-artifacts/${{ matrix.sensor }}-${{ steps.version.outputs.version }}-arm-linux.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Summary
+        run: |
+          echo "## Build Summary for ${{ matrix.sensor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target**: arm-unknown-linux-musleabihf" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ✅ Success" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "- **Release**: Created release ${{ matrix.sensor }}-${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Release**: Skipped (not main branch)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  build-summary:
+    needs: [detect-changes, build-and-release]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Summary
+        run: |
+          echo "# Sensor API Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.detect-changes.outputs.any-changes }}" == "true" ]; then
+            echo "## Changed Sensors" >> $GITHUB_STEP_SUMMARY
+            echo "The following sensors were rebuilt:" >> $GITHUB_STEP_SUMMARY
+            echo '${{ needs.detect-changes.outputs.changed-sensors }}' | jq -r '.[] | "- " + .' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## No Changes Detected" >> $GITHUB_STEP_SUMMARY
+            echo "No sensor code was modified in this push." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Status" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.build-and-release.result }}" == "success" ]; then
+            echo "✅ All builds completed successfully" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.build-and-release.result }}" == "failure" ]; then
+            echo "❌ Some builds failed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.build-and-release.result }}" == "skipped" ]; then
+            echo "⏭️ Builds skipped (no changes)" >> $GITHUB_STEP_SUMMARY
+          fi

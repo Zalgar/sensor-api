@@ -1,0 +1,14 @@
+[Unit]
+Description=VEML7700 Light Sensor API
+After=network.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+Type=simple
+ExecStart=/srv/veml7700/veml7700_api
+WorkingDirectory=/srv/veml7700
+User=sensor
+
+[Install]
+WantedBy=multi-user.target

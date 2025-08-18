@@ -8,6 +8,7 @@ use std::fs; // Import filesystem operations
 use std::fs::File; // Import file operations
 use std::io::Write; // Import write operations
 use env_logger::Env; // Import environment logger
+use log::error; // Import error logging
 use ltr390::LTR390; // Import LTR390 driver
 
 // Configuration structure for the application
@@ -17,6 +18,7 @@ struct Config {
     i2c_address_decimal: u16, // I2C address of the LTR390 sensor
     i2c_bus_device_path: String, // Path to the I2C bus device
     bind_address: String, // Address to bind the web server to
+    uv_index_factor: f32, // Factor to convert raw UVS data to UV index
 }
 
 // Default implementation for the Config struct
@@ -24,9 +26,10 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             network_port: 5003, // Default network port
-            i2c_address_decimal: 0x53, // Default I2C address (83 in decimal)
+            i2c_address_decimal: 0x53, // Default I2C address (0x53 hex = 83 decimal)
             i2c_bus_device_path: String::from("/dev/i2c-1"), // Default I2C bus device path
             bind_address: String::from("0.0.0.0"), // Default bind address
+            uv_index_factor: 0.000434, // Default UV index calculation factor (adjust as needed)
         }
     }
 }
@@ -52,8 +55,9 @@ fn read_or_create_config() -> Config {
 struct SensorData {
     timestamp: String,
     model: String,
-    uv_index: f32,
-    ambient_light: f32,
+    uv_index: f32,      // UV index calculated value
+    light_uv: u32,      // Raw UVS data from sensor
+    light_ambient: f32, // Ambient light value
 }
 
 async fn get_sensor_data() -> impl Responder {
@@ -63,43 +67,56 @@ async fn get_sensor_data() -> impl Responder {
     let i2c_bus = match I2cdev::new(&config.i2c_bus_device_path) {
         Ok(bus) => bus,
         Err(e) => {
-            eprintln!("Failed to open I2C bus: {:?}", e);
+            error!("Failed to open I2C bus: {}", e);
             return HttpResponse::InternalServerError().body("Failed to open I2C bus");
         }
     };
 
     // Create LTR390 sensor object with the correct I2C address
-    let mut ltr390 = LTR390::new(i2c_bus, config.i2c_address_decimal as u8);
+    let mut ltr390 = match LTR390::new(i2c_bus, config.i2c_address_decimal as u8) {
+        Ok(sensor) => sensor,
+        Err(e) => {
+            error!("Failed to create LTR390 sensor: {}", e);
+            return HttpResponse::InternalServerError().body("Failed to create LTR390 sensor");
+        }
+    };
 
     // Initialize the LTR390 sensor
     if let Err(e) = ltr390.begin() {
-        eprintln!("Failed to initialize LTR390 sensor: {:?}", e);
+        error!("Failed to initialize LTR390 sensor: {}", e);
         return HttpResponse::InternalServerError().body("Failed to initialize LTR390 sensor");
     }
 
-    // Read sensor data
+    // Read sensor data with proper delays between mode switches
     let uv_data = match ltr390.read_uvs() {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Failed to read UV sensor data: {:?}", e);
+            error!("Failed to read UV sensor data: {}", e);
             return HttpResponse::InternalServerError().body("Failed to read UV sensor data");
         }
     };
 
+    // Add delay between UVS and ALS readings to allow proper mode switching
+    std::thread::sleep(std::time::Duration::from_millis(200));
+
     let als_data = match ltr390.read_als() {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Failed to read ALS sensor data: {:?}", e);
+            error!("Failed to read ALS sensor data: {}", e);
             return HttpResponse::InternalServerError().body("Failed to read ALS sensor data");
         }
     };
+
+    // Calculate UV Index from raw UV data using configurable factor
+    let uv_index = (uv_data as f32) * config.uv_index_factor;
 
     // Create sensor data response
     let sensor_data = SensorData {
         timestamp: Utc::now().to_rfc3339(),
         model: String::from("LTR390"),
-        uv_index: uv_data as f32,
-        ambient_light: als_data as f32,
+        uv_index,
+        light_uv: uv_data,
+        light_ambient: als_data as f32,
     };
 
     HttpResponse::Ok().json(sensor_data)

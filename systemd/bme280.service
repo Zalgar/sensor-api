@@ -1,5 +1,5 @@
 [Unit]
-Description=bme280 sensor api
+Description=BME280 Temperature/Humidity/Pressure Sensor API
 After=network.target
 Wants=network-online.target
 

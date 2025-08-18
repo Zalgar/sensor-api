@@ -1,0 +1,14 @@
+[Unit]
+Description=TSL2591 Light Sensor API
+After=network.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+Type=simple
+ExecStart=/srv/tsl2591/tsl2591_api
+WorkingDirectory=/srv/tsl2591
+User=sensor
+
+[Install]
+WantedBy=multi-user.target

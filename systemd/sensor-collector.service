@@ -1,0 +1,14 @@
+[Unit]
+Description=Sensor collector for sensor api
+After=network.target bme280.service pmsa003i.service scd-41.service ltr390.service bh1750.service veml7700.service tsl2591.service
+Wants=network-online.target
+
+[Service]
+Restart=always
+Type=simple
+ExecStart=/srv/sensor-collector/sensor-collector
+WorkingDirectory=/srv/sensor-collector
+User=sensor
+
+[Install]
+WantedBy=multi-user.target

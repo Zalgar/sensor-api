@@ -1,5 +1,5 @@
 [Unit]
-Description=scd-41 sensor api
+Description=SCD-41 CO2/Temperature/Humidity Sensor API
 After=network.target
 Wants=network-online.target
 

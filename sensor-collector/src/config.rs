@@ -10,6 +10,24 @@ pub struct Config {
     pub influxdb_org: String,
     pub influxdb_bucket: String,
     pub query_interval: u64, // Interval in seconds
+    
+    // Output configuration flags
+    pub enable_influxdb: bool,
+    pub enable_mqtt: bool,
+    
+    // Logging configuration
+    pub log_level: String, // "debug", "info", "warn", "error"
+    pub enable_mqtt_debug: bool,
+    pub enable_influxdb_debug: bool,
+    pub enable_api_debug: bool,
+    
+    // MQTT configuration
+    pub mqtt_broker: String,
+    pub mqtt_port: u16,
+    pub mqtt_device_id: String, // Device identifier (e.g., "sensor-collector")
+    pub mqtt_client_id: String,
+    pub mqtt_username: Option<String>,
+    pub mqtt_password: Option<String>,
 }
 
 pub fn create_config() -> Config {
@@ -22,6 +40,24 @@ pub fn create_config() -> Config {
             influxdb_org: "your_org".to_string(),
             influxdb_bucket: "your_bucket".to_string(),
             query_interval: 60, // Default interval of 60 seconds
+            
+            // Output configuration flags
+            enable_influxdb: true,
+            enable_mqtt: false,
+            
+            // Logging configuration
+            log_level: "info".to_string(), // Default to info level
+            enable_mqtt_debug: false,
+            enable_influxdb_debug: false,
+            enable_api_debug: false,
+            
+            // MQTT configuration
+            mqtt_broker: "localhost".to_string(),
+            mqtt_port: 1883,
+            mqtt_device_id: "sensor-collector".to_string(), // Device identifier for topic structure
+            mqtt_client_id: "sensor-collector".to_string(),
+            mqtt_username: None,
+            mqtt_password: None,
         };
         let config_data = serde_json::to_string_pretty(&default_config).unwrap();
         fs::write(config_path, config_data).expect("Unable to write config file");
