@@ -1,5 +1,6 @@
 use actix_web::{web, App, HttpServer, HttpResponse, Responder, middleware::Logger};
 use env_logger::Env;
+use log::error;
 use serde::{Deserialize, Serialize};
 use chrono::Utc;
 //use std::fs;
@@ -9,9 +10,9 @@ use linux_embedded_hal::I2cdev;
 use pmsa003i::Pmsa003i;
 
 #[derive(Serialize, Deserialize)]
-
 struct Config {
     network_port: u16,
+    i2c_address_decimal: u16,
     i2c_bus_device_path: String,
     bind_address: String,
 }
@@ -20,6 +21,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             network_port: 5001,
+            i2c_address_decimal: 0x12, // Default I2C address for PMSA003I
             i2c_bus_device_path: String::from("/dev/i2c-1"),
             bind_address: String::from("0.0.0.0"),
         }
@@ -75,7 +77,7 @@ async fn get_sensor_data() -> impl Responder {
             HttpResponse::Ok().json(response)
         }
         Err(e) => {
-            eprintln!("Failed to read sensor data: {:?}", e);
+            error!("Failed to read sensor data: {}", e);
             HttpResponse::InternalServerError().body("Failed to read sensor data")
         }
     }
