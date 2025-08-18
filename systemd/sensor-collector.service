@@ -1,6 +1,6 @@
 [Unit]
 Description=Sensor collector for sensor api
-After=network.target pmsa003i.service scd-41.service bme280.service
+After=network.target bme280.service pmsa003i.service scd-41.service ltr390.service bh1750.service veml7700.service tsl2591.service
 Wants=network-online.target
 
 [Service]

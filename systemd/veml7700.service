@@ -6,8 +6,8 @@ Wants=network-online.target
 [Service]
 Restart=always
 Type=simple
-WorkingDirectory=/srv/veml7700
 ExecStart=/srv/veml7700/veml7700_api
+WorkingDirectory=/srv/veml7700
 User=sensor
 
 [Install]
