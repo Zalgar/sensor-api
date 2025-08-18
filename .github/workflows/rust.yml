@@ -9,6 +9,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  packages: write
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -64,19 +68,48 @@ jobs:
           SENSORS_WITHOUT_RELEASES=()
           if [ "${{ github.ref }}" == "refs/heads/main" ]; then
             echo "Checking for sensors without releases..."
-            for sensor in "${ALL_SENSORS[@]}"; do
-              # Use GitHub API to check if any releases exist for this sensor
-              RELEASES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                "https://api.github.com/repos/${{ github.repository }}/releases" | \
-                jq -r --arg sensor "$sensor" '[.[] | select(.tag_name | startswith($sensor + "-"))] | length')
+            
+            # First, get all releases from the repository
+            echo "Fetching repository releases..."
+            RELEASES_RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases")
+            
+            # Check if API call was successful
+            if [ $? -ne 0 ]; then
+              echo "❌ GitHub API call failed, will build all sensors as fallback"
+              SENSORS_WITHOUT_RELEASES=("${ALL_SENSORS[@]}")
+            else
+              echo "✅ Successfully fetched releases data"
+              echo "Raw API response (first 500 chars):"
+              echo "$RELEASES_RESPONSE" | head -c 500
+              echo ""
               
-              if [ "$RELEASES" == "0" ]; then
-                SENSORS_WITHOUT_RELEASES+=("$sensor")
-                echo "No releases found for: $sensor"
+              # Extract all release tag names
+              EXISTING_TAGS=$(echo "$RELEASES_RESPONSE" | jq -r '.[].tag_name' 2>/dev/null || echo "")
+              
+              if [ -z "$EXISTING_TAGS" ]; then
+                echo "No existing releases found or jq failed - will build all sensors"
+                SENSORS_WITHOUT_RELEASES=("${ALL_SENSORS[@]}")
               else
-                echo "Found $RELEASES existing release(s) for: $sensor"
+                echo "Existing release tags:"
+                echo "$EXISTING_TAGS"
+                echo ""
+                
+                # Check each sensor for existing releases
+                for sensor in "${ALL_SENSORS[@]}"; do
+                  SENSOR_RELEASES=$(echo "$EXISTING_TAGS" | grep "^${sensor}-" | wc -l)
+                  
+                  if [ "$SENSOR_RELEASES" -eq 0 ]; then
+                    SENSORS_WITHOUT_RELEASES+=("$sensor")
+                    echo "No releases found for: $sensor"
+                  else
+                    echo "Found $SENSOR_RELEASES existing release(s) for: $sensor"
+                  fi
+                done
               fi
-            done
+            fi
+          else
+            echo "Skipping release check (not on main branch)"
           fi
           
           # Combine changed sensors and sensors without releases
@@ -95,11 +128,18 @@ jobs:
             fi
           done
           
+          # Debug output
+          echo "=== BUILD DECISION SUMMARY ==="
+          echo "Changed sensors: ${CHANGED_SENSORS[*]:-none}"
+          echo "Sensors without releases: ${SENSORS_WITHOUT_RELEASES[*]:-none}"
+          echo "Total sensors to build: ${BUILD_SENSORS[*]:-none}"
+          echo "=============================="
+          
           # Convert array to JSON format for matrix
           if [ ${#BUILD_SENSORS[@]} -eq 0 ]; then
             echo "changed-sensors=[]" >> $GITHUB_OUTPUT
             echo "any-changes=false" >> $GITHUB_OUTPUT
-            echo "No sensors to build"
+            echo "❌ No sensors to build"
           else
             # Create JSON array manually to avoid jq dependency issues
             JSON_ARRAY="["
@@ -113,15 +153,15 @@ jobs:
             
             echo "changed-sensors=$JSON_ARRAY" >> $GITHUB_OUTPUT
             echo "any-changes=true" >> $GITHUB_OUTPUT
-            echo "Sensors to build: ${BUILD_SENSORS[*]}"
-            echo "JSON output: $JSON_ARRAY"
+            echo "✅ Sensors to build: ${BUILD_SENSORS[*]}"
+            echo "✅ JSON output: $JSON_ARRAY"
             
             # Output summary
             if [ ${#CHANGED_SENSORS[@]} -gt 0 ]; then
-              echo "Changed sensors: ${CHANGED_SENSORS[*]}"
+              echo "📝 Changed sensors: ${CHANGED_SENSORS[*]}"
             fi
             if [ ${#SENSORS_WITHOUT_RELEASES[@]} -gt 0 ]; then
-              echo "Sensors without releases: ${SENSORS_WITHOUT_RELEASES[*]}"
+              echo "🚀 Sensors without releases: ${SENSORS_WITHOUT_RELEASES[*]}"
             fi
           fi
 
