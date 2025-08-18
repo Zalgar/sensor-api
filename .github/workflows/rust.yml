@@ -60,26 +60,69 @@ jobs:
             fi
           done
           
+          # Check for sensors without existing releases (only on main branch)
+          SENSORS_WITHOUT_RELEASES=()
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "Checking for sensors without releases..."
+            for sensor in "${ALL_SENSORS[@]}"; do
+              # Use GitHub API to check if any releases exist for this sensor
+              RELEASES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                "https://api.github.com/repos/${{ github.repository }}/releases" | \
+                jq -r --arg sensor "$sensor" '[.[] | select(.tag_name | startswith($sensor + "-"))] | length')
+              
+              if [ "$RELEASES" == "0" ]; then
+                SENSORS_WITHOUT_RELEASES+=("$sensor")
+                echo "No releases found for: $sensor"
+              else
+                echo "Found $RELEASES existing release(s) for: $sensor"
+              fi
+            done
+          fi
+          
+          # Combine changed sensors and sensors without releases
+          BUILD_SENSORS=()
+          
+          # Add changed sensors
+          for sensor in "${CHANGED_SENSORS[@]}"; do
+            BUILD_SENSORS+=("$sensor")
+          done
+          
+          # Add sensors without releases (avoid duplicates)
+          for sensor in "${SENSORS_WITHOUT_RELEASES[@]}"; do
+            if [[ ! " ${BUILD_SENSORS[@]} " =~ " ${sensor} " ]]; then
+              BUILD_SENSORS+=("$sensor")
+              echo "Adding sensor without release: $sensor"
+            fi
+          done
+          
           # Convert array to JSON format for matrix
-          if [ ${#CHANGED_SENSORS[@]} -eq 0 ]; then
+          if [ ${#BUILD_SENSORS[@]} -eq 0 ]; then
             echo "changed-sensors=[]" >> $GITHUB_OUTPUT
             echo "any-changes=false" >> $GITHUB_OUTPUT
-            echo "No sensor changes detected"
+            echo "No sensors to build"
           else
             # Create JSON array manually to avoid jq dependency issues
             JSON_ARRAY="["
-            for i in "${!CHANGED_SENSORS[@]}"; do
+            for i in "${!BUILD_SENSORS[@]}"; do
               if [ $i -gt 0 ]; then
                 JSON_ARRAY+=","
               fi
-              JSON_ARRAY+="\"${CHANGED_SENSORS[$i]}\""
+              JSON_ARRAY+="\"${BUILD_SENSORS[$i]}\""
             done
             JSON_ARRAY+="]"
             
             echo "changed-sensors=$JSON_ARRAY" >> $GITHUB_OUTPUT
             echo "any-changes=true" >> $GITHUB_OUTPUT
-            echo "Changed sensors: ${CHANGED_SENSORS[*]}"
+            echo "Sensors to build: ${BUILD_SENSORS[*]}"
             echo "JSON output: $JSON_ARRAY"
+            
+            # Output summary
+            if [ ${#CHANGED_SENSORS[@]} -gt 0 ]; then
+              echo "Changed sensors: ${CHANGED_SENSORS[*]}"
+            fi
+            if [ ${#SENSORS_WITHOUT_RELEASES[@]} -gt 0 ]; then
+              echo "Sensors without releases: ${SENSORS_WITHOUT_RELEASES[*]}"
+            fi
           fi
 
   build-and-release:
@@ -218,7 +261,12 @@ jobs:
             - 🎯 Target: `arm-unknown-linux-musleabihf`
             - 🔨 Built from commit: `${{ github.sha }}`
             - 📅 Build time: `${{ steps.version.outputs.version }}`
-            - 🚀 Trigger: Push to main branch
+            - 🚀 Trigger: Automatic build (code changes or first release)
+            
+            **Build Reason:**
+            This sensor was built because either:
+            - Code changes were detected in the sensor directory, OR
+            - No previous release exists for this sensor
             
             **What's included:**
             - Compiled binary for ARM Linux
@@ -263,20 +311,29 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ needs.detect-changes.outputs.any-changes }}" == "true" ]; then
-            echo "## Changed Sensors" >> $GITHUB_STEP_SUMMARY
-            echo "The following sensors were rebuilt:" >> $GITHUB_STEP_SUMMARY
+            echo "## Sensors Built" >> $GITHUB_STEP_SUMMARY
+            echo "The following sensors were built:" >> $GITHUB_STEP_SUMMARY
             echo '${{ needs.detect-changes.outputs.changed-sensors }}' | jq -r '.[] | "- " + .' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Build reasons:**" >> $GITHUB_STEP_SUMMARY
+            echo "- Sensors with code changes are automatically built" >> $GITHUB_STEP_SUMMARY
+            echo "- Sensors without existing releases are built on main branch" >> $GITHUB_STEP_SUMMARY
           else
-            echo "## No Changes Detected" >> $GITHUB_STEP_SUMMARY
-            echo "No sensor code was modified in this push." >> $GITHUB_STEP_SUMMARY
+            echo "## No Builds Required" >> $GITHUB_STEP_SUMMARY
+            echo "No sensor code was modified and all sensors have existing releases." >> $GITHUB_STEP_SUMMARY
           fi
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Build Status" >> $GITHUB_STEP_SUMMARY
           if [ "${{ needs.build-and-release.result }}" == "success" ]; then
             echo "✅ All builds completed successfully" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+              echo "🚀 Releases created for built sensors" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "📝 Development build (no releases created)" >> $GITHUB_STEP_SUMMARY
+            fi
           elif [ "${{ needs.build-and-release.result }}" == "failure" ]; then
             echo "❌ Some builds failed" >> $GITHUB_STEP_SUMMARY
           elif [ "${{ needs.build-and-release.result }}" == "skipped" ]; then
-            echo "⏭️ Builds skipped (no changes)" >> $GITHUB_STEP_SUMMARY
+            echo "⏭️ Builds skipped (no changes and all sensors have releases)" >> $GITHUB_STEP_SUMMARY
           fi
