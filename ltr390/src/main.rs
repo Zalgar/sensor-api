@@ -8,6 +8,7 @@ use std::fs; // Import filesystem operations
 use std::fs::File; // Import file operations
 use std::io::Write; // Import write operations
 use env_logger::Env; // Import environment logger
+use log::error; // Import error logging
 use ltr390::LTR390; // Import LTR390 driver
 
 // Configuration structure for the application
@@ -66,7 +67,7 @@ async fn get_sensor_data() -> impl Responder {
     let i2c_bus = match I2cdev::new(&config.i2c_bus_device_path) {
         Ok(bus) => bus,
         Err(e) => {
-            eprintln!("Failed to open I2C bus: {:?}", e);
+            error!("Failed to open I2C bus: {}", e);
             return HttpResponse::InternalServerError().body("Failed to open I2C bus");
         }
     };
@@ -75,14 +76,14 @@ async fn get_sensor_data() -> impl Responder {
     let mut ltr390 = match LTR390::new(i2c_bus, config.i2c_address_decimal as u8) {
         Ok(sensor) => sensor,
         Err(e) => {
-            eprintln!("Failed to create LTR390 sensor: {:?}", e);
+            error!("Failed to create LTR390 sensor: {}", e);
             return HttpResponse::InternalServerError().body("Failed to create LTR390 sensor");
         }
     };
 
     // Initialize the LTR390 sensor
     if let Err(e) = ltr390.begin() {
-        eprintln!("Failed to initialize LTR390 sensor: {:?}", e);
+        error!("Failed to initialize LTR390 sensor: {}", e);
         return HttpResponse::InternalServerError().body("Failed to initialize LTR390 sensor");
     }
 
@@ -90,7 +91,7 @@ async fn get_sensor_data() -> impl Responder {
     let uv_data = match ltr390.read_uvs() {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Failed to read UV sensor data: {:?}", e);
+            error!("Failed to read UV sensor data: {}", e);
             return HttpResponse::InternalServerError().body("Failed to read UV sensor data");
         }
     };
@@ -101,7 +102,7 @@ async fn get_sensor_data() -> impl Responder {
     let als_data = match ltr390.read_als() {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Failed to read ALS sensor data: {:?}", e);
+            error!("Failed to read ALS sensor data: {}", e);
             return HttpResponse::InternalServerError().body("Failed to read ALS sensor data");
         }
     };

@@ -7,6 +7,7 @@ use std::fs; // Import filesystem operations
 use std::fs::File; // Import file operations
 use std::io::Write; // Import write operations
 use env_logger::Env; // Import environment logger
+use log::error; // Import error logging
 
 // Configuration structure for the application
 #[derive(Serialize, Deserialize)]
@@ -75,7 +76,7 @@ async fn get_sensor_data() -> impl Responder {
 
     // Initialize the BME280 sensor with the delay
     if let Err(e) = bme280.init(&mut delay) {
-        eprintln!("Failed to initialize BME280 sensor: {:?}", e);
+        error!("Failed to initialize BME280 sensor: {}", e);
         return HttpResponse::InternalServerError().body("Failed to initialize BME280 sensor");
     }
 
@@ -83,7 +84,7 @@ async fn get_sensor_data() -> impl Responder {
     let data = match bme280.measure(&mut delay) {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Failed to read sensor data: {:?}", e);
+            error!("Failed to read sensor data: {}", e);
             return HttpResponse::InternalServerError().body("Failed to read sensor data");
         }
     };

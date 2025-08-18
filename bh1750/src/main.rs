@@ -1,13 +1,14 @@
 mod bh1750;
 
-use actix_web::{web, App, HttpServer, HttpResponse, Responder, middleware::Logger}; // Import necessary Actix Web components
-use linux_embedded_hal::I2cdev;  // Import I2C device from linux_embedded_hal
-use serde::{Deserialize, Serialize}; // Import serialization/deserialization from Serde
-use chrono::Utc; // Import Utc for timestamps
-use std::fs; // Import filesystem operations
-use std::fs::File; // Import file operations
-use std::io::Write; // Import write operations
-use env_logger::Env; // Import environment logger
+use actix_web::{web, App, HttpServer, HttpResponse, Responder, middleware::Logger};
+use linux_embedded_hal::I2cdev;
+use serde::{Deserialize, Serialize};
+use chrono::Utc;
+use std::fs;
+use std::fs::File;
+use std::io::Write;
+use env_logger::Env;
+use log::error;
 use bh1750::BH1750; // Import BH1750 driver
 
 // Configuration structure for the application
@@ -42,7 +43,7 @@ fn read_or_create_config() -> Config {
         match serde_json::from_str(&config_data) {
             Ok(config) => return config,
             Err(e) => {
-                eprintln!("Error parsing config file: {}. Using default configuration.", e);
+                error!("Error parsing config file: {}. Using default configuration.", e);
             }
         }
     }
@@ -69,7 +70,7 @@ async fn get_sensor_data() -> impl Responder {
     let i2c_bus = match I2cdev::new(&config.i2c_bus_device_path) {
         Ok(bus) => bus,
         Err(e) => {
-            eprintln!("Failed to open I2C bus: {:?}", e);
+            error!("Failed to open I2C bus: {}", e);
             return HttpResponse::InternalServerError().body("Failed to open I2C bus");
         }
     };
@@ -78,14 +79,14 @@ async fn get_sensor_data() -> impl Responder {
     let mut bh1750 = match BH1750::new(i2c_bus, config.i2c_address_decimal as u8) {
         Ok(sensor) => sensor,
         Err(e) => {
-            eprintln!("Failed to create BH1750 sensor: {:?}", e);
+            error!("Failed to create BH1750 sensor: {}", e);
             return HttpResponse::InternalServerError().body("Failed to create BH1750 sensor");
         }
     };
 
     // Initialize the BH1750 sensor
     if let Err(e) = bh1750.begin() {
-        eprintln!("Failed to initialize BH1750 sensor: {:?}", e);
+        error!("Failed to initialize BH1750 sensor: {}", e);
         return HttpResponse::InternalServerError().body("Failed to initialize BH1750 sensor");
     }
 
@@ -93,7 +94,7 @@ async fn get_sensor_data() -> impl Responder {
     let light_data = match bh1750.read_light_level() {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Failed to read light sensor data: {:?}", e);
+            error!("Failed to read light sensor data: {}", e);
             return HttpResponse::InternalServerError().body("Failed to read light sensor data");
         }
     };

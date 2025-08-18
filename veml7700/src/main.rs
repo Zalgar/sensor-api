@@ -1,13 +1,14 @@
 mod veml7700;
 
-use actix_web::{web, App, HttpServer, HttpResponse, Responder, middleware::Logger}; // Import necessary Actix Web components
-use linux_embedded_hal::I2cdev;  // Import I2C device from linux_embedded_hal
-use serde::{Deserialize, Serialize}; // Import serialization/deserialization from Serde
-use chrono::Utc; // Import Utc for timestamps
-use std::fs; // Import filesystem operations
-use std::fs::File; // Import file operations
-use std::io::Write; // Import write operations
-use env_logger::Env; // Import environment logger
+use actix_web::{web, App, HttpServer, HttpResponse, Responder, middleware::Logger};
+use linux_embedded_hal::I2cdev;
+use serde::{Deserialize, Serialize};
+use chrono::Utc;
+use std::fs;
+use std::fs::File;
+use std::io::Write;
+use env_logger::Env;
+use log::error;
 use veml7700::VEML7700; // Import VEML7700 driver
 
 // Configuration structure for the application
@@ -46,7 +47,7 @@ fn read_or_create_config() -> Config {
         match serde_json::from_str(&config_data) {
             Ok(config) => return config,
             Err(e) => {
-                eprintln!("Error parsing config file: {}. Using default configuration.", e);
+                error!("Error parsing config file: {}. Using default configuration.", e);
             }
         }
     }
@@ -74,7 +75,7 @@ async fn get_sensor_data() -> impl Responder {
     let i2c_bus = match I2cdev::new(&config.i2c_bus_device_path) {
         Ok(bus) => bus,
         Err(e) => {
-            eprintln!("Failed to open I2C bus: {:?}", e);
+            error!("Failed to open I2C bus: {}", e);
             return HttpResponse::InternalServerError().body("Failed to open I2C bus");
         }
     };
@@ -83,25 +84,25 @@ async fn get_sensor_data() -> impl Responder {
     let mut veml7700 = match VEML7700::new(i2c_bus, config.i2c_address_decimal as u8) {
         Ok(sensor) => sensor,
         Err(e) => {
-            eprintln!("Failed to create VEML7700 sensor: {:?}", e);
+            error!("Failed to create VEML7700 sensor: {}", e);
             return HttpResponse::InternalServerError().body("Failed to create VEML7700 sensor");
         }
     };
 
     // Initialize the VEML7700 sensor
     if let Err(e) = veml7700.begin() {
-        eprintln!("Failed to initialize VEML7700 sensor: {:?}", e);
+        error!("Failed to initialize VEML7700 sensor: {}", e);
         return HttpResponse::InternalServerError().body("Failed to initialize VEML7700 sensor");
     }
 
     // Configure sensor with settings from config file
     if let Err(e) = veml7700.set_gain(config.als_gain) {
-        eprintln!("Failed to set sensor gain: {:?}", e);
+        error!("Failed to set sensor gain: {}", e);
         return HttpResponse::InternalServerError().body("Failed to set sensor gain");
     }
 
     if let Err(e) = veml7700.set_integration_time(config.integration_time) {
-        eprintln!("Failed to set integration time: {:?}", e);
+        error!("Failed to set integration time: {}", e);
         return HttpResponse::InternalServerError().body("Failed to set integration time");
     }
 
@@ -109,7 +110,7 @@ async fn get_sensor_data() -> impl Responder {
     let lux_data = match veml7700.read_lux() {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Failed to read lux data: {:?}", e);
+            error!("Failed to read lux data: {}", e);
             return HttpResponse::InternalServerError().body("Failed to read lux data");
         }
     };
@@ -117,20 +118,19 @@ async fn get_sensor_data() -> impl Responder {
     let white_data = match veml7700.read_white() {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Failed to read white light data: {:?}", e);
-            return HttpResponse::InternalServerError().body("Failed to read white light data");
+            error!("Failed to read white data: {}", e);
+            return HttpResponse::InternalServerError().body("Failed to read white data");
         }
     };
 
-    // Create sensor data response
     let sensor_data = SensorData {
         timestamp: Utc::now().to_rfc3339(),
-        model: String::from("VEML7700"),
+        model: "VEML7700".to_string(),
         light_ambient: lux_data,
         light_white: white_data,
     };
 
-    HttpResponse::Ok().json(sensor_data)
+    HttpResponse::Ok().json(&sensor_data)
 }
 
 #[actix_web::main]
