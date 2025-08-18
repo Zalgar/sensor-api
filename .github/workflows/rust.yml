@@ -27,11 +27,22 @@ jobs:
       - name: Detect changed sensors
         id: changes
         run: |
+          # Install jq if not available
+          if ! command -v jq &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+          
           # Get list of changed files
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
           else
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+            # For push events, compare with previous commit
+            if [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+              CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+            else
+              # First commit, check all files
+              CHANGED_FILES=$(git ls-files)
+            fi
           fi
           
           echo "Changed files:"
@@ -55,10 +66,20 @@ jobs:
             echo "any-changes=false" >> $GITHUB_OUTPUT
             echo "No sensor changes detected"
           else
-            CHANGED_JSON=$(printf '%s\n' "${CHANGED_SENSORS[@]}" | jq -R . | jq -s .)
-            echo "changed-sensors=$CHANGED_JSON" >> $GITHUB_OUTPUT
+            # Create JSON array manually to avoid jq dependency issues
+            JSON_ARRAY="["
+            for i in "${!CHANGED_SENSORS[@]}"; do
+              if [ $i -gt 0 ]; then
+                JSON_ARRAY+=","
+              fi
+              JSON_ARRAY+="\"${CHANGED_SENSORS[$i]}\""
+            done
+            JSON_ARRAY+="]"
+            
+            echo "changed-sensors=$JSON_ARRAY" >> $GITHUB_OUTPUT
             echo "any-changes=true" >> $GITHUB_OUTPUT
             echo "Changed sensors: ${CHANGED_SENSORS[*]}"
+            echo "JSON output: $JSON_ARRAY"
           fi
 
   build-and-release:
@@ -99,16 +120,29 @@ jobs:
           cargo build --target arm-unknown-linux-musleabihf --release --verbose
 
       - name: Verify build artifacts
+        id: verify
         run: |
           cd ${{ matrix.sensor }}
-          if [ -f "target/arm-unknown-linux-musleabihf/release/${{ matrix.sensor }}_api" ]; then
-            echo "✅ Binary built successfully: ${{ matrix.sensor }}_api"
-            ls -la target/arm-unknown-linux-musleabihf/release/${{ matrix.sensor }}_api
-          elif [ -f "target/arm-unknown-linux-musleabihf/release/sensor-collector" ]; then
-            echo "✅ Binary built successfully: sensor-collector"
-            ls -la target/arm-unknown-linux-musleabihf/release/sensor-collector
+          
+          # Determine expected binary name based on sensor type
+          if [ "${{ matrix.sensor }}" == "sensor-collector" ]; then
+            EXPECTED_BINARY="sensor-collector"
+          elif [ "${{ matrix.sensor }}" == "scd-41" ]; then
+            EXPECTED_BINARY="scd-41_api"
           else
-            echo "❌ Binary not found!"
+            EXPECTED_BINARY="${{ matrix.sensor }}_api"
+          fi
+          
+          BINARY_PATH="target/arm-unknown-linux-musleabihf/release/$EXPECTED_BINARY"
+          
+          if [ -f "$BINARY_PATH" ]; then
+            echo "✅ Binary built successfully: $EXPECTED_BINARY"
+            ls -la "$BINARY_PATH"
+            echo "binary-name=$EXPECTED_BINARY" >> $GITHUB_OUTPUT
+            echo "binary-path=$BINARY_PATH" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Expected binary not found: $BINARY_PATH"
+            echo "Contents of release directory:"
             ls -la target/arm-unknown-linux-musleabihf/release/
             exit 1
           fi
@@ -118,14 +152,9 @@ jobs:
           mkdir -p release-artifacts
           cd ${{ matrix.sensor }}
           
-          # Copy binary
-          if [ -f "target/arm-unknown-linux-musleabihf/release/${{ matrix.sensor }}_api" ]; then
-            cp target/arm-unknown-linux-musleabihf/release/${{ matrix.sensor }}_api ../release-artifacts/
-            BINARY_NAME="${{ matrix.sensor }}_api"
-          elif [ -f "target/arm-unknown-linux-musleabihf/release/sensor-collector" ]; then
-            cp target/arm-unknown-linux-musleabihf/release/sensor-collector ../release-artifacts/
-            BINARY_NAME="sensor-collector"
-          fi
+          # Copy binary using the verified binary name
+          BINARY_NAME="${{ steps.verify.outputs.binary-name }}"
+          cp "${{ steps.verify.outputs.binary-path }}" "../release-artifacts/$BINARY_NAME"
           
           # Copy configuration files if they exist
           if [ -f "config.json" ]; then
@@ -134,7 +163,7 @@ jobs:
           
           # Copy systemd service file
           if [ -f "../systemd/${{ matrix.sensor }}.service" ]; then
-            cp ../systemd/${{ matrix.sensor }}.service ../release-artifacts/
+            cp "../systemd/${{ matrix.sensor }}.service" ../release-artifacts/
           fi
           
           # Create README for this release
@@ -145,8 +174,10 @@ jobs:
           
           1. Copy the binary to your target system:
              \`\`\`bash
+             sudo mkdir -p /srv/${{ matrix.sensor }}
              sudo cp ${BINARY_NAME} /srv/${{ matrix.sensor }}/
              sudo chmod +x /srv/${{ matrix.sensor }}/${BINARY_NAME}
+             sudo chown -R sensor:sensor /srv/${{ matrix.sensor }}
              \`\`\`
           
           2. Install systemd service (if provided):
@@ -164,6 +195,7 @@ jobs:
           - **Target**: arm-unknown-linux-musleabihf
           - **Rust version**: $(rustc --version)
           - **Commit**: ${{ github.sha }}
+          - **Binary**: ${BINARY_NAME}
           EOF
 
       - name: Create compressed archive
