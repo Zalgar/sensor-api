@@ -77,7 +77,7 @@ async fn get_sensor_data() -> impl Responder {
             HttpResponse::Ok().json(response)
         }
         Err(e) => {
-            error!("Failed to read sensor data: {}", e);
+            error!("Failed to read sensor data: {:?}", e);
             HttpResponse::InternalServerError().body("Failed to read sensor data")
         }
     }
