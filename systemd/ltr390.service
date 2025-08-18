@@ -1,0 +1,14 @@
+[Unit]
+Description=LTR390 UV and Ambient Light Sensor API
+After=network.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+Type=simple
+ExecStart=/srv/ltr390/ltr390_api
+WorkingDirectory=/srv/ltr390
+User=sensor
+
+[Install]
+WantedBy=multi-user.target
