@@ -328,6 +328,89 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Create/Update Latest Tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          # Set up git configuration
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Define the latest tag name
+          LATEST_TAG="${{ matrix.sensor }}-latest"
+          
+          echo "Creating/updating latest tag: $LATEST_TAG"
+          
+          # Check if the latest tag already exists
+          if git rev-parse --verify "$LATEST_TAG" >/dev/null 2>&1; then
+            echo "Latest tag $LATEST_TAG exists, deleting old tag"
+            # Delete the tag locally and remotely
+            git tag -d "$LATEST_TAG" || true
+            git push origin --delete "$LATEST_TAG" || true
+          else
+            echo "Latest tag $LATEST_TAG does not exist, will create new one"
+          fi
+          
+          # Create the new latest tag pointing to current commit
+          git tag -a "$LATEST_TAG" -m "Latest release of ${{ matrix.sensor }} (auto-updated to ${{ steps.version.outputs.version }})"
+          
+          # Push the new latest tag
+          git push origin "$LATEST_TAG"
+          
+          echo "✅ Successfully created/updated latest tag: $LATEST_TAG"
+          echo "🏷️  Latest tag now points to: ${{ matrix.sensor }}-${{ steps.version.outputs.version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Latest Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ matrix.sensor }}-latest
+          name: ${{ matrix.sensor }} (Latest)
+          body: |
+            # ${{ matrix.sensor }} - Latest Release
+            
+            **This is an auto-updating tag that always points to the most recent release.**
+            
+            **Current Version:** `${{ steps.version.outputs.version }}`
+            
+            ---
+            
+            ## ${{ matrix.sensor }} Release ${{ steps.version.outputs.version }}
+            
+            **Build Information:**
+            - 🎯 Target: `arm-unknown-linux-musleabihf`
+            - 🔨 Built from commit: `${{ github.sha }}`
+            - 📅 Build time: `${{ steps.version.outputs.version }}`
+            - 🚀 Trigger: Automatic build (code changes or first release)
+            
+            **Build Reason:**
+            This sensor was built because either:
+            - Code changes were detected in the sensor directory, OR
+            - No previous release exists for this sensor
+            
+            **What's included:**
+            - Compiled binary for ARM Linux
+            - SystemD service file (if applicable)
+            - Example configuration file
+            - Installation instructions
+            
+            **Installation:**
+            1. Download and extract the archive
+            2. Copy binary to `/srv/${{ matrix.sensor }}/`
+            3. Install systemd service
+            4. Configure and start the service
+            
+            **Note:** This "latest" release is automatically updated whenever a new version is built. For stable deployments, consider using a specific version tag like `${{ matrix.sensor }}-${{ steps.version.outputs.version }}` instead.
+            
+            See the included README.md for detailed installation instructions.
+          files: |
+            release-artifacts/${{ matrix.sensor }}-${{ steps.version.outputs.version }}-arm-linux.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build Summary
         run: |
           echo "## Build Summary for ${{ matrix.sensor }}" >> $GITHUB_STEP_SUMMARY
@@ -336,6 +419,7 @@ jobs:
           echo "- **Status**: ✅ Success" >> $GITHUB_STEP_SUMMARY
           if [ "${{ github.ref }}" == "refs/heads/main" ]; then
             echo "- **Release**: Created release ${{ matrix.sensor }}-${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Latest Tag**: Updated ${{ matrix.sensor }}-latest to point to this release" >> $GITHUB_STEP_SUMMARY
           else
             echo "- **Release**: Skipped (not main branch)" >> $GITHUB_STEP_SUMMARY
           fi
@@ -369,6 +453,7 @@ jobs:
             echo "✅ All builds completed successfully" >> $GITHUB_STEP_SUMMARY
             if [ "${{ github.ref }}" == "refs/heads/main" ]; then
               echo "🚀 Releases created for built sensors" >> $GITHUB_STEP_SUMMARY
+              echo "🏷️  Latest tags updated for all built sensors" >> $GITHUB_STEP_SUMMARY
             else
               echo "📝 Development build (no releases created)" >> $GITHUB_STEP_SUMMARY
             fi

@@ -338,7 +338,149 @@ Each sensor project should include:
 3. Data aggregated and sent to InfluxDB/MQTT
 4. Centralized logging and monitoring
 
-## 14. Future Considerations
+## 14. GitHub Actions CI/CD Standards
+
+### Workflow Overview
+The project uses an automated CI/CD pipeline that builds and releases individual sensors when changes are detected or when no previous release exists.
+
+### Workflow Triggers
+- **Push Events**: Triggered on pushes to `main` and `dev` branches
+- **Pull Requests**: Triggered on PRs targeting `main` branch
+- **Release Creation**: Only occurs on `main` branch pushes
+
+### Change Detection Logic
+The workflow automatically detects which sensors need building:
+
+1. **File Change Detection**: Compares current commit with previous to identify modified sensor directories
+2. **Release Gap Detection**: On `main` branch, checks for sensors without existing releases
+3. **Smart Building**: Only builds sensors that have changes OR lack releases
+
+### Sensor Registry
+All sensors must be registered in the workflow's sensor list:
+```yaml
+ALL_SENSORS=("bme280" "pmsa003i" "scd-41" "ltr390" "bh1750" "veml7700" "tsl2591" "sensor-collector")
+```
+
+### Binary Naming Convention
+The workflow expects specific binary names based on sensor type:
+- **Standard Sensors**: `{sensor_name}_api` (e.g., `bme280_api`)
+- **Special Cases**: 
+  - `sensor-collector` → `sensor-collector`
+  - `scd-41` → `scd-41_api`
+
+### Version Format
+- **Pattern**: `YYYY.MM.DD-HH.MM` (24-hour format)
+- **Generation**: UTC timestamp at build time
+- **Example**: `2025.08.19-14.30`
+
+### Release Structure
+Each release includes:
+```
+{sensor_name}-{version}-arm-linux.tar.gz
+├── {binary_name}                    # Compiled ARM binary
+├── config.json.example              # Sample configuration
+├── {sensor_name}.service            # SystemD service file
+└── README.md                        # Installation instructions
+```
+
+### Required Project Structure for CI/CD
+For a sensor to be compatible with the automated workflow:
+
+#### 1. Directory Structure
+```
+{sensor_name}/
+├── Cargo.toml                       # Must define correct binary name
+├── config.json                      # Optional: included as example
+└── src/
+    └── main.rs                      # Entry point
+```
+
+#### 2. Cargo.toml Requirements
+```toml
+[package]
+name = "{sensor_name}_api"
+
+[[bin]]
+name = "{sensor_name}_api"           # Must match expected naming convention
+path = "src/main.rs"
+
+[dependencies]
+# Standard dependencies as per guidelines
+```
+
+#### 3. SystemD Service File
+Must exist in `systemd/{sensor_name}.service` relative to repository root
+
+### Adding New Sensors to CI/CD
+
+To add a new sensor to the automated build pipeline:
+
+1. **Register in Workflow**: Add sensor name to `ALL_SENSORS` array in `.github/workflows/rust.yml`
+2. **Follow Naming**: Ensure binary name matches expected convention
+3. **Create SystemD Service**: Add service file to `systemd/` directory
+4. **Test Build**: Verify sensor builds successfully for ARM target
+
+### Build Targets and Cross-Compilation
+- **Primary Target**: `arm-unknown-linux-musleabihf`
+- **Dependencies**: Automatically installs cross-compilation tools
+- **Libraries**: Configured for ARM Linux embedded systems
+
+### Release Management
+- **Automatic Releases**: Created only on `main` branch
+- **Tag Format**: `{sensor_name}-{version}` (e.g., `bme280-2025.08.19-14.30`)
+- **Latest Tags**: `{sensor_name}-latest` (auto-updated to point to most recent release)
+- **Release Notes**: Auto-generated with build information
+- **Artifacts**: Compressed archive with all deployment files
+
+#### Tag Types
+1. **Version Tags**: `{sensor_name}-{timestamp}` - Immutable, specific release versions
+2. **Latest Tags**: `{sensor_name}-latest` - Mutable, always points to most recent release
+
+#### Usage Examples
+```bash
+# Download specific version
+wget https://github.com/owner/repo/releases/download/bme280-2025.08.19-14.30/bme280-2025.08.19-14.30-arm-linux.tar.gz
+
+# Download latest version (always current)
+wget https://github.com/owner/repo/releases/download/bme280-latest/bme280-2025.08.19-14.30-arm-linux.tar.gz
+```
+
+### Build Matrix Strategy
+- **Parallel Building**: Each sensor builds independently
+- **Fail-Fast Disabled**: One sensor failure doesn't stop others
+- **Conditional Execution**: Only builds sensors with changes or missing releases
+
+### Integration with Development Workflow
+
+#### For New Sensor Development:
+1. Create sensor following project standards
+2. Add to `ALL_SENSORS` array in workflow
+3. Push to `dev` branch for build testing
+4. Merge to `main` for automatic release
+
+#### For Sensor Updates:
+1. Modify sensor code in feature branch
+2. Create PR to trigger validation build
+3. Merge to `main` triggers automatic release with new timestamp version
+
+### Troubleshooting CI/CD Issues
+
+#### Common Build Failures:
+- **Binary Not Found**: Check Cargo.toml binary name matches convention
+- **Missing Dependencies**: Ensure all required crates are in Cargo.toml
+- **Cross-Compilation Errors**: Verify ARM-compatible dependencies
+
+#### Release Issues:
+- **Missing SystemD Service**: Ensure service file exists in `systemd/` directory
+- **Permission Errors**: Verify GitHub token has appropriate permissions
+- **Duplicate Releases**: Check if sensor already has release for same timestamp
+
+### Monitoring and Notifications
+- **Build Summary**: Generated for each workflow run
+- **Step Summary**: Detailed information about build decisions
+- **Release Notifications**: GitHub automatically notifies on new releases
+
+## 15. Future Considerations
 
 ### Planned Enhancements
 - Health check endpoints (`/health`)
@@ -367,6 +509,11 @@ When implementing a new sensor API, verify:
 - [ ] Code organization follows standards
 - [ ] Documentation includes configuration options
 - [ ] Integration tested with sensor-collector
+- [ ] **GitHub Actions**: Sensor added to workflow `ALL_SENSORS` array
+- [ ] **GitHub Actions**: Binary name follows expected convention
+- [ ] **GitHub Actions**: SystemD service file exists in correct location
+- [ ] **GitHub Actions**: Builds successfully for ARM Linux target
+- [ ] **GitHub Actions**: Release artifacts include all required files
 
 ## Contact and Maintenance
 
